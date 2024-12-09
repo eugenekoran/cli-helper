@@ -157,7 +157,7 @@ def detect_shell() -> str:
 
 def main():
     parser = argparse.ArgumentParser(description="LLM-powered CLI helper")
-    parser.add_argument("--model", type=str, default="gpt-4", help="OpenAI model to use")
+    parser.add_argument("--model", type=str, default="gpt-4o", help="OpenAI model to use")
     parser.add_argument("--max-tokens", type=int, default=1000, help="Maximum tokens for response")
     args = parser.parse_args()
 

@@ -1,6 +1,6 @@
 # CLI Helper
 
-An intelligent command-line interface helper powered by GPT-4 that suggests and executes shell commands based on natural language descriptions.
+An intelligent command-line interface helper powered by GPT-4o that suggests and executes shell commands based on natural language descriptions.
 
 ## Features
 
