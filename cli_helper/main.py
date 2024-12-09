@@ -1,10 +1,11 @@
 #!/usr/bin/env python3
-import json
-import sys
-import os
-import openai
-import subprocess
 import argparse
+import json
+import os
+import subprocess
+import sys
+
+import openai
 import rich_click as click
 from rich.console import Console
 from rich.table import Table
