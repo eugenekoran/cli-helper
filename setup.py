@@ -19,7 +19,7 @@ setup(
     description="An LLM-powered CLI helper that suggests and executes shell commands",
     long_description=open("README.md").read(),
     long_description_content_type="text/markdown",
-    url="https://github.com/yourusername/cli-helper",
+    url="https://github.com/eugenekoran/cli-helper",
     classifiers=[
         "Programming Language :: Python :: 3",
         "License :: OSI Approved :: MIT License",
