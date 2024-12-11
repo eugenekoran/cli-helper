@@ -50,10 +50,40 @@ cli-helper [--model MODEL] [--max-tokens MAX_TOKENS] [-q QUESTION]
 - Use 'exit' or 'quit' to close the program
 
 ### Example Usage:
+
+Run with specific model and token limit:
 ```bash
-What would you like to do? > Find all PDF files in the current directory
+$ cli-helper --model gpt-4o-mini --max-tokens 500
 ```
-The tool will suggest various commands and let you choose which one to execute.
+Output:
+```
+Welcome to LLM CLI Helper! (Type 'exit' to quit)
+Type 'clear' to start a new conversation
+
+What would you like to do? > 
+```
+
+Start with an initial question:
+```bash
+$ cli-helper -q "show the first 10 lines of data.csv"
+```
+Output:
+```
+Welcome to LLM CLI Helper! (Type 'exit' to quit)
+Type 'clear' to start a new conversation
+
+
+┏━━━┳━━━━━━━━━━━━━━━━━━━━━┳━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┓
+┃ # ┃ Command             ┃ Description                                      ┃
+┡━━━╇━━━━━━━━━━━━━━━━━━━━━╇━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┩
+│ 1 │ head -n 10 data.csv │ Display the first 10 lines of the file data.csv. │
+└───┴─────────────────────┴──────────────────────────────────────────────────┘
+
+
+2: Cancel - don't execute any command
+
+Select a command [1]: 
+```
 
 ## Development
 
