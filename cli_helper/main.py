@@ -52,21 +52,28 @@ def get_llm_response(prompt: str, current_shell: str, conversation_history: list
                 "role": "system", 
                 "content": f"""You are a helpful CLI assistant running in {current_shell} shell. Your sole purpose is to help users with command-line tasks.
 
-                For non-CLI related questions (like hardware issues, general advice, etc.):
-                - Politely remind the user that you're a CLI assistant
-                - Suggest they ask about command-line tasks instead
-                Example: "I'm a CLI assistant focused on helping with command-line tasks. If you have any questions about using the terminal, running commands, or managing files and processes, I'd be happy to help!"
+                Response Guidelines:
+                1. For command-line tasks:
+                   - ALWAYS use the suggest_commands tool to provide command suggestions
+                   - If details are insufficient, use suggest_commands with needs_more_info=True
+                   - Include a relevant follow_up_question to gather missing information
 
-                When a user asks a question that can be solved with shell commands:
-                1. Don't provide the command directly in the message
-                2. Instead, respond with: "This can be solved with a shell command. Would you like me to suggest some options?"
-                
-                Only provide direct responses (without using suggest_commands) in these cases:
-                - When responding to greetings or general questions about your CLI capabilities
-                - When you need more information about the specific CLI task
-                - When clarifying that a request is not CLI-related
+                2. For general shell-related questions:
+                   - Explain the concepts or options clearly
+                   - Guide the user towards formulating a specific command request
+                   - Ask for necessary details to construct an executable command
 
-                When suggesting commands through suggest_commands:
+                3. For non-CLI related questions:
+                   - If it's a greeting or question about your CLI capabilities, respond directly
+                   - For all other non-CLI topics, politely remind the user that you're a CLI assistant
+                   - Suggest they ask about command-line tasks instead
+                   Example: "I'm a CLI assistant focused on helping with command-line tasks. If you have any questions about using the terminal, running commands, or managing files and processes, I'd be happy to help!"
+
+                IMPORTANT:
+                - NEVER provide shell commands directly in messages
+                - ALWAYS use the suggest_commands tool for any command suggestions
+
+                When using suggest_commands:
                 - Provide multiple command options when possible
                 - Commands must be fully executable (no placeholder paths)
                 - Use relative paths unless absolute paths are specifically requested
@@ -158,7 +165,8 @@ def detect_shell() -> str:
 def main():
     parser = argparse.ArgumentParser(description="LLM-powered CLI helper")
     parser.add_argument("--model", type=str, default="gpt-4o", help="OpenAI model to use")
-    parser.add_argument("--max-tokens", type=int, default=1000, help="Maximum tokens for response")
+    parser.add_argument("--max-tokens", type=int, default=1_000, help="Maximum tokens for response")
+    parser.add_argument("-q", "--question", type=str, help="Initial question to start with")
     args = parser.parse_args()
 
     # Add shell detection
@@ -178,13 +186,18 @@ def main():
 
     # Initialize conversation history
     conversation_history = []
+    initial_query = args.question
     
     print("Welcome to LLM CLI Helper! (Type 'exit' to quit)")
     print("Type 'clear' to start a new conversation")
     
     while True:
         try:
-            user_input = input("\nWhat would you like to do? > ")
+            if initial_query:
+                user_input = initial_query
+                initial_query= None
+            else:
+                user_input = input("\nWhat would you like to do? > ")
             
             if user_input.lower() in ["exit", "quit"]:
                 break

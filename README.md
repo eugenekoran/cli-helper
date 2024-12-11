@@ -37,8 +37,13 @@ For permanent configuration, add the above line to your shell's configuration fi
 
 Once installed, you can run the tool from anywhere using:
 ```bash
-cli-helper [--model MODEL] [--max-tokens MAX_TOKENS]
+cli-helper [--model MODEL] [--max-tokens MAX_TOKENS] [-q QUESTION]
 ```
+### Options:
+- `--model`: OpenAI model to use (default: gpt-4o)
+- `--max-tokens`: Maximum tokens for response (default: 1000)
+- `-q, --question`: Initial question to start with
+
 ### Commands:
 - Type your request in natural language
 - Use 'clear' to start a new conversation
