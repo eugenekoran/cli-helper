@@ -60,7 +60,7 @@ Output:
 Welcome to LLM CLI Helper! (Type 'exit' to quit)
 Type 'clear' to start a new conversation
 
-What would you like to do? > 
+What would you like to do? >
 ```
 
 Start with an initial question:
@@ -82,7 +82,7 @@ Type 'clear' to start a new conversation
 
 2: Cancel - don't execute any command
 
-Select a command [1]: 
+Select a command [1]:
 ```
 
 ## Development

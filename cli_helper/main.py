@@ -220,7 +220,7 @@ def main():
             if isinstance(response, str):
                 console.print(response)
             elif isinstance(response, dict):
-                if response.get("needs_more_info", False):
+                if response.get("needs_more_info"):
                     console.print(response.get("follow_up_question", "Could you provide more details?"))
                 else:
                     selected_command = present_options(response["commands"])
