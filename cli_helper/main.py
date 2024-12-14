@@ -10,6 +10,7 @@ import rich_click as click
 from rich.console import Console
 from rich.table import Table
 
+
 def get_llm_response(prompt: str, current_shell: str, conversation_history: list, model: str, max_tokens: int) -> dict | str | None:
     """Get response from OpenAI API with conversation context"""
     try:
@@ -114,6 +115,7 @@ def get_llm_response(prompt: str, current_shell: str, conversation_history: list
         print(f"Error getting LLM response: {e}")
         sys.exit(1)
 
+
 def present_options(suggestions: list[dict]) -> str | None:
     """Present command options to user and return selected command using interactive dropdown"""
     console = Console()
@@ -148,6 +150,7 @@ def present_options(suggestions: list[dict]) -> str | None:
         except ValueError:
             console.print("[red]Please enter a valid number.[/red]")
 
+
 def execute_command(command: str) -> None:
     """Execute the suggested command"""
     try:
@@ -158,9 +161,11 @@ def execute_command(command: str) -> None:
     except Exception as e:
         print(f"Error executing command: {e}")
 
+
 def detect_shell() -> str:
     """Detect current shell from SHELL environment variable"""
     return os.path.basename(os.environ.get("SHELL", "unknown"))
+
 
 def main():
     parser = argparse.ArgumentParser(description="LLM-powered CLI helper")
@@ -233,6 +238,7 @@ def main():
             break
         except Exception as e:
             print(f"An error occurred: {e}")
+
 
 if __name__ == "__main__":
     main()
