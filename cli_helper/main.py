@@ -11,7 +11,7 @@ from rich.console import Console
 from rich.table import Table
 
 
-def get_llm_response(prompt: str, current_shell: str, conversation_history: list, model: str, max_tokens: int) -> dict | str | None:
+def get_llm_response(current_shell: str, conversation_history: list, model: str, max_tokens: int) -> dict | str | None:
     """Get response from OpenAI API with conversation context"""
     try:
         tools = [{
@@ -85,12 +85,6 @@ def get_llm_response(prompt: str, current_shell: str, conversation_history: list
         
         # Add conversation history
         messages.extend(conversation_history)
-        
-        # Add current prompt
-        messages.append({
-            "role": "user",
-            "content": prompt
-        })
 
         response = openai.chat.completions.create(
             model=model,
@@ -105,6 +99,7 @@ def get_llm_response(prompt: str, current_shell: str, conversation_history: list
             tool_call = response.choices[0].message.tool_calls[0]
             result = json.loads(tool_call.function.arguments)
             conversation_history.append({"role": "assistant", "content": json.dumps(result)})
+            conversation_history.append({"role": "assistant", "tool_call_id": tool_call.id, "tool_calls": response.choices[0].message.tool_calls})
             return result
         else:
             content = response.choices[0].message.content
@@ -151,16 +146,13 @@ def present_options(suggestions: list[dict]) -> str | None:
             console.print("[red]Please enter a valid number.[/red]")
 
 
-def execute_command(command: str) -> None:
-    """Execute the suggested command"""
+def execute_command(command: str) -> subprocess.CompletedProcess:
+    """Execute the suggested command and return the result"""
     try:
-        result = subprocess.run(command, shell=True, text=True, capture_output=True)
-        print(result.stdout)
-        if result.stderr:
-            print("Error:", result.stderr)
+        return subprocess.run(command, shell=True, text=True, capture_output=True)
     except Exception as e:
         print(f"Error executing command: {e}")
-
+        return None
 
 def detect_shell() -> str:
     """Detect current shell from SHELL environment variable"""
@@ -192,34 +184,40 @@ def main():
     # Initialize conversation history
     conversation_history = []
     initial_query = args.question
+    skip_input = False
     
     print("Welcome to LLM CLI Helper! (Type 'exit' to quit)")
     print("Type 'clear' to start a new conversation")
     
     while True:
         try:
-            if initial_query:
-                user_input = initial_query
-                initial_query= None
+            if not skip_input:
+                if initial_query:
+                    user_input = initial_query
+                    initial_query= None
+                else:
+                    user_input = input("\nWhat would you like to do? > ")
+
+                if user_input.lower() in ["exit", "quit"]:
+                    break
+
+                if user_input.lower() == "clear":
+                    conversation_history = []
+                    print("Conversation history cleared!")
+                    continue
+
+                if not user_input.strip():
+                    continue
+
+                # Add user input to conversation history
+                conversation_history.append({"role": "user", "content": user_input})
+                console_status = "[bold green]Thinking..."
             else:
-                user_input = input("\nWhat would you like to do? > ")
-            
-            if user_input.lower() in ["exit", "quit"]:
-                break
+                console_status = "[bold red]Handling error..."
+                skip_input = False
 
-            if user_input.lower() == "clear":
-                conversation_history = []
-                print("Conversation history cleared!")
-                continue
-
-            if not user_input.strip():
-                continue
-
-            # Add user input to conversation history
-            conversation_history.append({"role": "user", "content": user_input})
-
-            with console.status("[bold green]Thinking...", spinner="dots"):
-                response = get_llm_response(user_input, current_shell, conversation_history, args.model, args.max_tokens)
+            with console.status(console_status, spinner="dots"):
+                response = get_llm_response(current_shell, conversation_history, args.model, args.max_tokens)
             
             # Handle different types of responses
             if isinstance(response, str):
@@ -227,11 +225,32 @@ def main():
             elif isinstance(response, dict):
                 if response.get("needs_more_info"):
                     console.print(response.get("follow_up_question", "Could you provide more details?"))
+                    conversation_history.pop()
                 else:
                     selected_command = present_options(response["commands"])
                     if selected_command:
                         console.print(">>", selected_command, style="green")
-                        execute_command(selected_command)
+                        result = execute_command(selected_command)
+                        if result and result.stdout:
+                            print(result.stdout)
+                        if result and result.stderr:
+                            console.print("Error:", result.stderr)
+                            # Wrap the error as a tool use and add it to conversation history
+                            error_message = result.stderr.strip()
+                            tool_message = conversation_history.pop()
+                            conversation_history.pop()
+                            conversation_history.append(tool_message)
+                            conversation_history.append({
+                                "role": "tool",
+                                "tool_call_id": conversation_history[-1]["tool_call_id"],
+                                "content": json.dumps({
+                                    "command": selected_command,
+                                    "error_message": error_message
+                                })
+                            })
+                            skip_input = True
+                        else:
+                            conversation_history.pop()
 
         except KeyboardInterrupt:
             print("\nExiting...")
