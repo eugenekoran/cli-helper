@@ -186,8 +186,8 @@ def main():
     initial_query = args.question
     skip_input = False
     
-    print("Welcome to LLM CLI Helper! (Type 'exit' to quit)")
-    print("Type 'clear' to start a new conversation")
+    console.print("Welcome to LLM CLI Helper! (Type 'exit' to quit)")
+    console.print("Type 'clear' to start a new conversation")
     
     while True:
         try:
@@ -203,7 +203,7 @@ def main():
 
                 if user_input.lower() == "clear":
                     conversation_history = []
-                    print("Conversation history cleared!")
+                    console.print("Conversation history cleared!")
                     continue
 
                 if not user_input.strip():
@@ -232,7 +232,7 @@ def main():
                         console.print(">>", selected_command, style="green")
                         result = execute_command(selected_command)
                         if result and result.stdout:
-                            print(result.stdout)
+                            console.print(result.stdout)
                         if result and result.stderr:
                             console.print("Error:", result.stderr)
                             # Wrap the error as a tool use and add it to conversation history
@@ -253,10 +253,10 @@ def main():
                             conversation_history.pop()
 
         except KeyboardInterrupt:
-            print("\nExiting...")
+            console.print("\nExiting...")
             break
         except Exception as e:
-            print(f"An error occurred: {e}")
+            console.print(f"An error occurred: {e}")
 
 
 if __name__ == "__main__":
