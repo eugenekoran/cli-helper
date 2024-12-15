@@ -139,7 +139,7 @@ def present_options(suggestions: list[dict]) -> str | None:
             if 1 <= choice_idx <= total_options:
                 return suggestions[choice_idx - 1]["command"]
             elif choice_idx == total_options + 1:
-                return None
+                return
             else:
                 console.print("[red]Invalid choice. Please try again.[/red]")
         except ValueError:
@@ -152,7 +152,7 @@ def execute_command(command: str) -> subprocess.CompletedProcess:
         return subprocess.run(command, shell=True, text=True, capture_output=True)
     except Exception as e:
         print(f"Error executing command: {e}")
-        return None
+        return
 
 def detect_shell() -> str:
     """Detect current shell from SHELL environment variable"""
