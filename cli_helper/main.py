@@ -1,6 +1,5 @@
 #!/usr/bin/env python3
 import argparse
-import json
 import os
 import subprocess
 import sys
@@ -10,121 +9,10 @@ import rich_click as click
 from rich.console import Console
 from rich.table import Table
 
-
-def get_llm_response(current_shell: str, conversation_history: list, model: str, max_tokens: int) -> dict | str | None:
-    """Get response from OpenAI API with conversation context"""
-    try:
-        tools = [{
-            "type": "function",
-            "function": {
-                "name": "suggest_commands",
-                "description": "Suggest multiple bash commands to accomplish the task",
-                "parameters": {
-                    "type": "object",
-                    "properties": {
-                        "commands": {
-                            "type": "array",
-                            "items": {
-                                "type": "object",
-                                "properties": {
-                                    "command": {"type": "string", "description": "The bash command to execute"},
-                                    "description": {"type": "string", "description": "Brief description of what the command does"}
-                                },
-                                "required": ["command", "description"]
-                            }
-                        },
-                        "needs_more_info": {
-                            "type": "boolean",
-                            "description": "Set to true if more information is needed from the user"
-                        },
-                        "follow_up_question": {
-                            "type": "string",
-                            "description": "Question to ask the user for additional information"
-                        }
-                    },
-                    "required": ["commands", "needs_more_info"]
-                }
-            }
-        }]
-
-        # Build messages with conversation history
-        messages = [
-            {
-                "role": "system", 
-                "content": f"""You are a helpful CLI assistant running in {current_shell} shell. Your sole purpose is to help users with command-line tasks.
-
-Response Guidelines:
-1. For command-line tasks:
-   - ALWAYS use the suggest_commands tool to provide command suggestions
-   - If details are insufficient, use suggest_commands with needs_more_info=True
-   - Include a relevant follow_up_question to gather missing information
-
-2. For general shell-related questions:
-   - Explain the concepts or options clearly
-   - Guide the user towards formulating a specific command request
-   - Ask for necessary details to construct an executable command
-
-3. For non-CLI related questions:
-   - If it's a greeting or question about your CLI capabilities, respond directly
-   - For all other non-CLI topics, politely remind the user that you're a CLI assistant
-   - Suggest they ask about command-line tasks instead
-   Example: "I'm a CLI assistant focused on helping with command-line tasks. If you have any questions about using the terminal, running commands, or managing files and processes, I'd be happy to help!"
-
-IMPORTANT:
-- NEVER provide shell commands directly in messages
-- ALWAYS use the suggest_commands tool for any command suggestions
-
-When using suggest_commands:
-- Provide multiple command options when possible
-- Commands must be fully executable (no placeholder paths)
-- Use relative paths unless absolute paths are specifically requested
-- Each command should have a clear, concise description
-"""
-            }
-        ]
-        
-        # Add conversation history
-        messages.extend(conversation_history)
-
-        response = openai.chat.completions.create(
-            model=model,
-            messages=messages,
-            tools=tools,
-            tool_choice="auto",
-            max_tokens=max_tokens
-        )
-
-        # Store the assistant's response in conversation history consistently
-        assistant_message = response.choices[0].message
-        message_entry = {
-            "role": "assistant",
-            "content": assistant_message.content,
-        }
-
-        if assistant_message.tool_calls:
-            message_entry["tool_calls"] = [
-                {
-                    "id": tool_call.id,
-                    "type": "function",
-                    "function": {"name": tool_call.function.name, "arguments": tool_call.function.arguments}
-                }
-                for tool_call in assistant_message.tool_calls
-            ]
-
-        conversation_history.append(message_entry)
-
-        if assistant_message.tool_calls:
-            tool_call = assistant_message.tool_calls[0]
-            return json.loads(tool_call.function.arguments)
-        else:
-            return assistant_message.content
-
-    except Exception as e:
-        print(f"Error getting LLM response: {e}")
-        sys.exit(1)
+from llm import CommandResult, OpenAIClient, LLMConfig, LLMClientError
 
 
-def present_options(suggestions: list[dict]) -> str | None:
+def present_options(suggestions: list[dict[str, str]]) -> str | None:
     """Present command options to user and return selected command using interactive dropdown"""
     console = Console()
     
@@ -159,13 +47,23 @@ def present_options(suggestions: list[dict]) -> str | None:
             console.print("[red]Please enter a valid number.[/red]")
 
 
-def execute_command(command: str) -> subprocess.CompletedProcess:
+def execute_command(command: str) -> CommandResult:
     """Execute the suggested command and return the result"""
     try:
-        return subprocess.run(command, shell=True, text=True, capture_output=True)
+        result = subprocess.run(command, shell=True, text=True, capture_output=True)
+        return {
+            "command": command,
+            "stdout": result.stdout,
+            "stderr": result.stderr,
+            "success": result.returncode == 0
+        }
     except Exception as e:
-        print(f"Error executing command: {e}")
-        return
+        return {
+            "command": command,
+            "stdout": None,
+            "stderr": str(e),
+            "success": False
+        }
 
 def detect_shell() -> str:
     """Detect current shell from SHELL environment variable"""
@@ -192,10 +90,15 @@ def main():
         sys.exit(1)
     
     openai.api_key = os.environ["OPENAI_API_KEY"]
+
     console = Console()
+    config = LLMConfig(
+        model=args.model,
+        max_tokens=args.max_tokens
+    )
+    llm_client = OpenAIClient(config, current_shell)
 
     # Initialize conversation history
-    conversation_history = []
     initial_query = args.question
     skip_input = False
     
@@ -215,7 +118,7 @@ def main():
                     break
 
                 if user_input.lower() == "clear":
-                    conversation_history = []
+                    llm_client.clear_history()
                     console.print("Conversation history cleared!")
                     continue
 
@@ -223,73 +126,49 @@ def main():
                     continue
 
                 # Add user input to conversation history
-                conversation_history.append({"role": "user", "content": user_input})
+                llm_client.get_user_input(user_input)
                 console_args = dict(status="[bold green]Thinking...[/bold green]", spinner_style="green", spinner="dots")
             else:
                 # When handling error, just continue with the existing context
                 console_args = dict(status="[bold red]Handling error...[/bold red]", spinner_style="red", spinner="dots")
                 skip_input = False
-
+            for item in llm_client.conversation_history:
+                print(item, end="\n\n")
             with console.status(**console_args):
-                response = get_llm_response(current_shell, conversation_history, args.model, args.max_tokens)
-            
+                response = llm_client.respond()
+
             # Handle different types of responses
             if isinstance(response, str):
                 console.print(response)
             elif isinstance(response, dict):
                 if response.get("needs_more_info"):
-                    console.print(response.get("follow_up_question", "Could you provide more details?"))
-                    conversation_history.append({
-                        "role": "tool",
-                        "tool_call_id": conversation_history[-1]["tool_calls"][0]["id"],
-                        "content": json.dumps({
-                            "needs_more_info": True,
-                            "follow_up_question": response.get("follow_up_question"),
-                            "user_response": "pending"
-                        })
-                    })
+                    question = response.get("follow_up_question", "Could you provide more details?")
+                    console.print(question)
+                    llm_client.handle_follow_up_question(question)
                 else:
                     selected_command = present_options(response["commands"])
                     if selected_command:
                         console.print(">>", selected_command, style="green")
                         result = execute_command(selected_command)
-
-                        tool_response = {
-                            "command": selected_command,
-                            "stdout": result.stdout if result and result.stdout else None,
-                            "stderr": result.stderr if result and result.stderr else None,
-                            "success": not bool(result.stderr if result else True)
-                        }
-
-                        conversation_history.append({
-                            "role": "tool",
-                            "tool_call_id": conversation_history[-1]["tool_calls"][0]["id"],
-                            "content": json.dumps(tool_response)
-                        })
+                        llm_client.handle_command_execution(result)
 
                         # Display command output
-                        if result and result.stdout:
-                            print(result.stdout)
-                        if result and result.stderr:
-                            print("Error:", result.stderr)
+                        if result["success"]:
+                            print(result["stdout"])
+                        else:
+                            print("Error:", result["stderr"])
                             skip_input = True
                     else:
                         # User cancelled the command execution
-                        conversation_history.append({
-                            "role": "tool",
-                            "tool_call_id": conversation_history[-1]["tool_calls"][0]["id"],
-                            "content": json.dumps({
-                                "command": None,
-                                "cancelled": True,
-                                "reason": "User cancelled command execution"
-                            })
-                        })
+                        llm_client.handle_command_abort("User cancelled command execution")
 
         except KeyboardInterrupt:
             print("\nExiting...")
             break
+        except LLMClientError as e:
+            console.print(f"[red]LLM Error: {e}[/red]")
         except Exception as e:
-            print(f"An error occurred: {e}")
+            console.print(f"[red]An error occurred: {e}[/red]")
 
 
 if __name__ == "__main__":
