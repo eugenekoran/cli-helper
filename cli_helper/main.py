@@ -53,33 +53,33 @@ def get_llm_response(current_shell: str, conversation_history: list, model: str,
                 "role": "system", 
                 "content": f"""You are a helpful CLI assistant running in {current_shell} shell. Your sole purpose is to help users with command-line tasks.
 
-                Response Guidelines:
-                1. For command-line tasks:
-                   - ALWAYS use the suggest_commands tool to provide command suggestions
-                   - If details are insufficient, use suggest_commands with needs_more_info=True
-                   - Include a relevant follow_up_question to gather missing information
+Response Guidelines:
+1. For command-line tasks:
+   - ALWAYS use the suggest_commands tool to provide command suggestions
+   - If details are insufficient, use suggest_commands with needs_more_info=True
+   - Include a relevant follow_up_question to gather missing information
 
-                2. For general shell-related questions:
-                   - Explain the concepts or options clearly
-                   - Guide the user towards formulating a specific command request
-                   - Ask for necessary details to construct an executable command
+2. For general shell-related questions:
+   - Explain the concepts or options clearly
+   - Guide the user towards formulating a specific command request
+   - Ask for necessary details to construct an executable command
 
-                3. For non-CLI related questions:
-                   - If it's a greeting or question about your CLI capabilities, respond directly
-                   - For all other non-CLI topics, politely remind the user that you're a CLI assistant
-                   - Suggest they ask about command-line tasks instead
-                   Example: "I'm a CLI assistant focused on helping with command-line tasks. If you have any questions about using the terminal, running commands, or managing files and processes, I'd be happy to help!"
+3. For non-CLI related questions:
+   - If it's a greeting or question about your CLI capabilities, respond directly
+   - For all other non-CLI topics, politely remind the user that you're a CLI assistant
+   - Suggest they ask about command-line tasks instead
+   Example: "I'm a CLI assistant focused on helping with command-line tasks. If you have any questions about using the terminal, running commands, or managing files and processes, I'd be happy to help!"
 
-                IMPORTANT:
-                - NEVER provide shell commands directly in messages
-                - ALWAYS use the suggest_commands tool for any command suggestions
+IMPORTANT:
+- NEVER provide shell commands directly in messages
+- ALWAYS use the suggest_commands tool for any command suggestions
 
-                When using suggest_commands:
-                - Provide multiple command options when possible
-                - Commands must be fully executable (no placeholder paths)
-                - Use relative paths unless absolute paths are specifically requested
-                - Each command should have a clear, concise description
-                """
+When using suggest_commands:
+- Provide multiple command options when possible
+- Commands must be fully executable (no placeholder paths)
+- Use relative paths unless absolute paths are specifically requested
+- Each command should have a clear, concise description
+"""
             }
         ]
         
@@ -94,17 +94,30 @@ def get_llm_response(current_shell: str, conversation_history: list, model: str,
             max_tokens=max_tokens
         )
 
-        # Store the assistant's response in conversation history
-        if response.choices[0].message.tool_calls:
-            tool_call = response.choices[0].message.tool_calls[0]
-            result = json.loads(tool_call.function.arguments)
-            conversation_history.append({"role": "assistant", "content": json.dumps(result)})
-            conversation_history.append({"role": "assistant", "tool_call_id": tool_call.id, "tool_calls": response.choices[0].message.tool_calls[-1:]})
-            return result
+        # Store the assistant's response in conversation history consistently
+        assistant_message = response.choices[0].message
+        message_entry = {
+            "role": "assistant",
+            "content": assistant_message.content,
+        }
+
+        if assistant_message.tool_calls:
+            message_entry["tool_calls"] = [
+                {
+                    "id": tool_call.id,
+                    "type": "function",
+                    "function": {"name": tool_call.function.name, "arguments": tool_call.function.arguments}
+                }
+                for tool_call in assistant_message.tool_calls
+            ]
+
+        conversation_history.append(message_entry)
+
+        if assistant_message.tool_calls:
+            tool_call = assistant_message.tool_calls[0]
+            return json.loads(tool_call.function.arguments)
         else:
-            content = response.choices[0].message.content
-            conversation_history.append({"role": "assistant", "content": content})
-            return content
+            return assistant_message.content
 
     except Exception as e:
         print(f"Error getting LLM response: {e}")
@@ -186,15 +199,15 @@ def main():
     initial_query = args.question
     skip_input = False
     
-    console.print("Welcome to LLM CLI Helper! (Type 'exit' to quit)")
-    console.print("Type 'clear' to start a new conversation")
+    print("Welcome to LLM CLI Helper! (Type 'exit' to quit)")
+    print("Type 'clear' to start a new conversation")
     
     while True:
         try:
             if not skip_input:
                 if initial_query:
                     user_input = initial_query
-                    initial_query= None
+                    initial_query = None
                 else:
                     user_input = input("\nWhat would you like to do? > ")
 
@@ -211,12 +224,13 @@ def main():
 
                 # Add user input to conversation history
                 conversation_history.append({"role": "user", "content": user_input})
-                console_status = "[bold green]Thinking..."
+                console_args = dict(status="[bold green]Thinking...[/bold green]", spinner_style="green", spinner="dots")
             else:
-                console_status = "[bold red]Handling error..."
+                # When handling error, just continue with the existing context
+                console_args = dict(status="[bold red]Handling error...[/bold red]", spinner_style="red", spinner="dots")
                 skip_input = False
 
-            with console.status(console_status, spinner="dots"):
+            with console.status(**console_args):
                 response = get_llm_response(current_shell, conversation_history, args.model, args.max_tokens)
             
             # Handle different types of responses
@@ -225,38 +239,57 @@ def main():
             elif isinstance(response, dict):
                 if response.get("needs_more_info"):
                     console.print(response.get("follow_up_question", "Could you provide more details?"))
-                    conversation_history.pop()
+                    conversation_history.append({
+                        "role": "tool",
+                        "tool_call_id": conversation_history[-1]["tool_calls"][0]["id"],
+                        "content": json.dumps({
+                            "needs_more_info": True,
+                            "follow_up_question": response.get("follow_up_question"),
+                            "user_response": "pending"
+                        })
+                    })
                 else:
                     selected_command = present_options(response["commands"])
                     if selected_command:
                         console.print(">>", selected_command, style="green")
                         result = execute_command(selected_command)
+
+                        tool_response = {
+                            "command": selected_command,
+                            "stdout": result.stdout if result and result.stdout else None,
+                            "stderr": result.stderr if result and result.stderr else None,
+                            "success": not bool(result.stderr if result else True)
+                        }
+
+                        conversation_history.append({
+                            "role": "tool",
+                            "tool_call_id": conversation_history[-1]["tool_calls"][0]["id"],
+                            "content": json.dumps(tool_response)
+                        })
+
+                        # Display command output
                         if result and result.stdout:
                             print(result.stdout)
                         if result and result.stderr:
                             print("Error:", result.stderr)
-                            # Wrap the error as a tool use and add it to conversation history
-                            error_message = result.stderr.strip()
-                            tool_message = conversation_history.pop()
-                            conversation_history.pop()
-                            conversation_history.append(tool_message)
-                            conversation_history.append({
-                                "role": "tool",
-                                "tool_call_id": conversation_history[-1]["tool_call_id"],
-                                "content": json.dumps({
-                                    "command": selected_command,
-                                    "error_message": error_message
-                                })
-                            })
                             skip_input = True
-                        else:
-                            conversation_history.pop()
+                    else:
+                        # User cancelled the command execution
+                        conversation_history.append({
+                            "role": "tool",
+                            "tool_call_id": conversation_history[-1]["tool_calls"][0]["id"],
+                            "content": json.dumps({
+                                "command": None,
+                                "cancelled": True,
+                                "reason": "User cancelled command execution"
+                            })
+                        })
 
         except KeyboardInterrupt:
-            console.print("\nExiting...")
+            print("\nExiting...")
             break
         except Exception as e:
-            console.print(f"An error occurred: {e}")
+            print(f"An error occurred: {e}")
 
 
 if __name__ == "__main__":
