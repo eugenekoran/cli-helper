@@ -11,7 +11,7 @@ An intelligent command-line interface helper powered by GPT-4o that suggests and
 - Conversation history management
 - Support for bash, zsh, and fish shells
 
-![CLI Helper Demo](docs/assets/images/demo.png)
+![CLI Helper Demo](docs/assets/images/demo.jpg)
 
 ## Installation
 
