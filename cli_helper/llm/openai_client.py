@@ -59,6 +59,18 @@ class OpenAIClient(BaseLLMClient):
         })
 
     def _get_llm_response(self) -> Union[Dict[str, Any], str]:
+        """Fetches and processes a response from the OpenAI API.
+
+        Constructs messages from the system prompt and conversation history,
+        sends them to the OpenAI API, and returns the processed response.
+
+        Returns:
+            Union[Dict[str, Any], str]: The LLM's response, either as a tool call
+            dictionary or a simple string message.
+
+        Raises:
+            LLMClientError: For API errors, rate limits, connection issues, or unexpected errors.
+        """
         try:
             messages = [
                 {"role": "system", "content": self.system_prompt},
