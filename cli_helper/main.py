@@ -132,8 +132,7 @@ def main():
                 # When handling error, just continue with the existing context
                 console_args = dict(status="[bold red]Handling error...[/bold red]", spinner_style="red", spinner="dots")
                 skip_input = False
-            for item in llm_client.conversation_history:
-                print(item, end="\n\n")
+
             with console.status(**console_args):
                 response = llm_client.respond()
 
